@@ -11,7 +11,8 @@ module ParallelGLM
            devresid2,
            invlink,
            link,
-           updateδβ,
+           updateXtW!,
+           varfunc,
            μη
 
     include("link.jl")
