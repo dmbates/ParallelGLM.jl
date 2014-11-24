@@ -1,5 +1,5 @@
 module ParallelGLM
-    using Distributions, StatsBase
+    using Distributions, Docile, StatsBase
     export IdentityLink,                # types
            InverseLink,
            Link,
