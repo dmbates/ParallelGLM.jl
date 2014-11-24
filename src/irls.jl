@@ -109,9 +109,7 @@ function StatsBase.deviance{T<:FloatingPoint}(g::PGLM{T},s::T)
         @inbounds g.βs[k] = g.β[k] + s * g.δβ[k]
     end
     fill!(g.dev,zero(T))
-    @sync for p in procs(g.y)
-        @async remotecall_wait(p,loc_dev!,g)
-    end
+    pmap(loc_dev!,fill(g,nworkers()))
     sum(g.dev)
 end
 
@@ -147,9 +145,7 @@ function updateXtW!{T<:FloatingPoint}(g::PGLM{T})
     n,p,npr = size(g)
     fill!(g.XtWX,zero(T))
     fill!(g.XtWr,zero(T))
-    @sync for pr in procs(g.y)
-        @async remotecall_wait(pr,loc_updateXtW!,g)
-    end
+    pmap(loc_updateXtW!, fill(g,nworkers()))
     for k in 2:npr
         for j in 1:p
             for i in j:p
@@ -180,3 +176,33 @@ function update1!{T<:FloatingPoint}(g::PGLM{T})
     A_ldiv_B!(cholfact!(view(sdata(g.XtWX),:,:,1),:L),copy!(sdata(g.δβ),view(sdata(g.XtWr),:,1)))
 end
     
+function StatsBase.fit{T<:FloatingPoint}(g::PGLM{T};verbose::Bool=false, maxIter::Integer=30,
+                                         minStepFac::Real=0.001, convTol::Real=1.e-6)
+    g.fit && return g
+    maxIter > zero(maxIter) || error("maxIter must be positive")
+    zero(minStepFac) < minStepFac < one(minStepFac) || error("minStepFac must be in (0,1)")
+
+    cvg = false
+    devold = deviance(g,zero(T))
+    for i in 1:maxIter
+        updateXtW!(g)
+        s = one(T)                      # step factor
+        dev = deviance(g,s)
+        while dev > devold
+            s *= convert(T,0.5)         # halve the step factor
+            s > minStepFac || error("step-halving failed at β₀ = $(g.β)")
+            dev = deviance(g,s)
+        end
+        copy!(g.β,g.βs)
+        crit = (devold - dev)/dev
+        verbose && println("$i: $dev, $crit")
+        if crit < convTol
+            cvg = true
+            break
+        end
+        devold = dev
+    end
+    cvg || error("failure to converge in $maxIter iterations")
+    g.fit = true
+    g
+end

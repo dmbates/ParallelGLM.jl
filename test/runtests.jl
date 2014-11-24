@@ -4,7 +4,20 @@ addprocs(2)
 @everywhere using Distributions, ParallelGLM
 
 n = 100_000
-y = map(round,Base.shmem_rand(n))  # random 0/1 Float64 values
-Xt = convert(SharedArray,hcat(ones(n),rand(n))')
-g = PGLM(Xt,y,Bernoulli())
-deviance(g,1.0)                         # should be n*2*log(2.)
+srand(1234321)
+
+const Xt = convert(SharedArray,vcat(ones(n)',randn(19,n)))
+const βtrue = convert(SharedArray,randn(size(Xt,1)))
+const ηtrue = Xt'*βtrue
+const μtrue = similar(ηtrue);
+const ll = LogitLink();
+for i in 1:n
+    μtrue[i] = invlink(ll,ηtrue[i])
+end
+const y = similar(μtrue)
+for i in 1:n
+    y[i] = rand() > μtrue[i] ? 0. : 1.
+end
+
+g = PGLM(Xt,y,Bernoulli());
+fit(g; verbose=true);
