@@ -1,3 +1,5 @@
+## Definition of Link types and methods for link, invlink and μη, the derivative of μ w.r.t. η
+
 abstract Link
 
 type IdentityLink <: Link end

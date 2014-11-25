@@ -1,50 +1,15 @@
-@doc """
-Returns the canonical Link type for an instance of a distribution in the exponential family
-""" ->
-canonical(::Bernoulli) = LogitLink()
-canonical(::Binomial) = LogitLink()
-canonical(::Gamma) = InverseLink()
-canonical(::Normal) = IdentityLink()
-canonical(::Poisson) = LogLink()
-
-@doc """
-Evaluate `y*log(y/μ)` with the correct limit as `y` approaches zero from above
-"""->
-ylogydμ{T<:FloatingPoint}(y::T,μ::T) = y > zero(T) ? y*log(y/μ) : zero(T)
-
-@doc """
-The Bernoulli and binomial variance function
-"""->
-bernvar(μ) = μ*(one(μ)-μ)
-
-varfunc(::Bernoulli,μ) = μ*(one(μ)-μ)
-varfunc(::Binomial,μ) = μ*(one(μ)-μ)
-varfunc(::Gamma,μ) = abs2(μ)
-varfunc(::Normal,μ) = one(μ)
-varfunc(::Poisson,μ) = μ
-
-two(y) = one(y) + one(y)
-@doc """
-Evaluate half the squared deviance residual for a distribution instance and values of `y` and `μ`
-"""->
-devresid2(::Bernoulli,y,μ) = two(y)*(ylogydμ(y,μ) + ylogydμ(one(y)-y,one(μ)-μ))
-devresid2(::Binomial,y,μ) = devresid2(Bernoulli(),y,μ)
-devresid2(::Gamma,y,μ) =  two(y)*((y-μ)/μ - (y == zero(y) ? y : log(y/μ)))
-devresid2(::Normal,y,μ) = abs2(y-μ)
-devresid2(::Poisson,y,μ) = two(y)*(ylogydμ(y,μ)-(y-μ))
-
 @doc "Representation of a generalized linear model using SharedArrays" ->
 type PGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link}
-    Xt::SharedMatrix{T}
+    Xt::SharedMatrix{T}                 # transposed model matrix
     XtWX::SharedArray{T,3}
     XtWr::SharedMatrix{T}
-    wt::SharedVector{T}
-    y::SharedVector{T}
+    wt::SharedVector{T}                 # prior case weights
+    y::SharedVector{T}                  # observed response vector
     β::SharedVector{T}                  # base value of β
     βs::SharedVector{T}                 # value of β + s*̱δβ
     δβ::SharedVector{T}                 # increment
-    η::SharedVector{T}
-    μ::SharedVector{T}
+    η::SharedVector{T}                  # current linear predictor vector
+    μ::SharedVector{T}                  # current mean vector
     dev::SharedVector{T}
     d::D
     l::L
@@ -81,7 +46,6 @@ end
 @doc """
 Evaluate the sum of the squared deviance residuals on the local indices of `y`
 """ ->
-
 function loc_dev!{T<:FloatingPoint}(g::PGLM{T})
     dev = zero(T)
     @inbounds for j in localindexes(g.y)
@@ -91,8 +55,7 @@ function loc_dev!{T<:FloatingPoint}(g::PGLM{T})
         end
         g.η[j] = sm
         g.μ[j] = invlink(g.l,sm)
-        dr2 = devresid2(g.d,g.y[j],g.μ[j])
-        dev += g.wt[j] * dr2
+        dev += g.wt[j] * devresid2(g.d,g.y[j],g.μ[j])
     end
     g.dev[g.y.pidx] = dev
 end
@@ -152,25 +115,6 @@ function updateXtW!{T<:FloatingPoint}(g::PGLM{T})
                 g.XtWX[i,j,1] += g.XtWX[i,j,k]
             end
             g.XtWr[j,1] += g.XtWr[j,k]
-        end
-    end
-    A_ldiv_B!(cholfact!(view(sdata(g.XtWX),:,:,1),:L),copy!(sdata(g.δβ),view(sdata(g.XtWr),:,1)))
-end
-
-function update1!{T<:FloatingPoint}(g::PGLM{T})
-    n,p,npr = size(g)
-    usewt = length(g.wt) > 0
-    fill!(g.XtWX,zero(T))
-    fill!(g.XtWr,zero(T))
-    @inbounds for ii in 1:n
-        W = g.wt[ii] * varfunc(g.d,g.μ[ii])
-        for j in 1:p
-            Wj = g.Xt[j,ii]
-            g.XtWr[j,1] += Wj * (g.y[ii] - g.μ[ii])
-            Wj *= W
-            @simd for i in j:p
-                g.XtWX[i,j,1] += g.Xt[i,ii] * Wj
-            end
         end
     end
     A_ldiv_B!(cholfact!(view(sdata(g.XtWX),:,:,1),:L),copy!(sdata(g.δβ),view(sdata(g.XtWr),:,1)))
