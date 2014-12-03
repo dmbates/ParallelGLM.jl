@@ -30,3 +30,12 @@ devresid2(::Binomial,y,μ) = devresid2(Bernoulli(),y,μ)
 devresid2(::Gamma,y,μ) =  two(y)*((y-μ)/μ - (y == zero(y) ? y : log(y/μ)))
 devresid2(::Normal,y,μ) = abs2(y-μ)
 devresid2(::Poisson,y,μ) = two(y)*(ylogydμ(y,μ)-(y-μ))
+
+@doc """
+Initial μ value from the y and wt
+""" ->
+mustart{T<:FloatingPoint}(::Bernoulli,y::T,wt::T) = (wt*y + convert(T,0.5))/(wt + one(T))
+mustart{T<:FloatingPoint}(::Binomial,y::T,wt::T) = (wt*y + convert(T,0.5))/(wt + one(T))
+mustart(::Gamma,y,wt) = y
+mustart(::Normal,y,wt) = y
+mustart{T<:FloatingPoint}(::Poisson,y::T,wt::T) = convert(T,1.1)*y
