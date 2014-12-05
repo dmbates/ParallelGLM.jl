@@ -14,7 +14,6 @@ type PGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link}
     dev::SharedVector{T}
     d::D
     l::L
-    canon::Bool
     fit::Bool
 end
 
@@ -31,7 +30,7 @@ function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
     ntot = maximum(pr)
     g = PGLM(Xt,similar(Xt),zeros(T,(p,p)),similar(y,(p,ntot)),wt,y,
              β,copy(β),copy(β),similar(y),similar(y),similar(y,(ntot,)),
-             d,l,l==canonical(d),false)
+             d,l,false)
     initμη!(g)
     updateXtW!(g)
     copy!(g.β,g.δβ)

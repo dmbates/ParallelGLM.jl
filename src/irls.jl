@@ -34,7 +34,7 @@ end
 function loc_updateXtW!{T<:FloatingPoint}(g::PGLM{T})
     n,p,npr = size(g)
     k = procs(g.y)[g.y.pidx]
-    if g.canon
+    if g.l == canonical(g.d)
         @inbounds for ii in localindexes(g.y)
             W = g.wt[ii] * varfunc(g.d,g.μ[ii])
             for j in 1:p
@@ -46,12 +46,12 @@ function loc_updateXtW!{T<:FloatingPoint}(g::PGLM{T})
         error("Code not yet written")
         for ii in localindexes(g.y)
             mueta = μη(g.l,g.η[ii])
-            W = wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
+            W = g.wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
             for j in 1:p
                 @simd for i in j:p
                     g.XtWX[i,j,k] += g.Xt[i,ii] * W * g.Xt[j,ii]
                 end
-                g.XtWr[j,k] += Xt[j,ii]*W*(g.y[ii] - g.μ[ii])/max(eps(T),mueta)
+                g.XtWr[j,k] += g.Xt[j,ii]*W*(g.y[ii] - g.μ[ii])/max(eps(T),mueta)
             end
         end
     end
