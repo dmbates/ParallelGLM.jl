@@ -1,8 +1,7 @@
 @doc "Representation of a generalized linear model using SharedArrays" ->
 type PGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link}
     Xt::SharedMatrix{T}                 # transposed model matrix
-    XtW::SharedMatrix{T}                # weighted transposed model matrix
-    XtWX::Matrix{T}
+    XtWX::SharedArray{T,3}
     XtWr::SharedMatrix{T}
     wt::SharedVector{T}                 # prior case weights
     y::SharedVector{T}                  # observed response vector
@@ -28,7 +27,7 @@ function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
     Set(pr) == Set(procs(Xt)) == Set(procs(wt)) || error("SharedArrays must have same procs")
     β = Base.shmem_fill(zero(T),(p,);pids = pr)
     ntot = maximum(pr)
-    g = PGLM(Xt,similar(Xt),zeros(T,(p,p)),similar(y,(p,ntot)),wt,y,
+    g = PGLM(Xt,similar(y,(p,p,ntot)),similar(y,(p,ntot)),wt,y,
              β,copy(β),copy(β),similar(y),similar(y),similar(y,(ntot,)),
              d,l,false)
     initμη!(g)

@@ -38,12 +38,15 @@ function loc_updateXtW!{T<:FloatingPoint}(g::PGLM{T})
         @inbounds for ii in localindexes(g.y)
             W = g.wt[ii] * varfunc(g.d,g.μ[ii])
             for j in 1:p
-                g.XtWr[j,k] += g.Xt[j,ii] * (g.y[ii] - g.μ[ii])
-                g.XtW[j,ii] = g.Xt[j,ii]*W
+                Wj = g.Xt[j,ii]
+                g.XtWr[j,k] += Wj * (g.y[ii] - g.μ[ii])
+                Wj *= W
+                @simd for i in j:p
+                    g.XtWX[i,j,k] += g.Xt[i,ii] * Wj
+                end
             end
         end
     else
-        error("Code not yet written")
         for ii in localindexes(g.y)
             mueta = μη(g.l,g.η[ii])
             W = g.wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
@@ -58,18 +61,18 @@ function loc_updateXtW!{T<:FloatingPoint}(g::PGLM{T})
 end
 function updateXtW!{T<:FloatingPoint}(g::PGLM{T})
     n,p,npr = size(g)
-    fill!(g.δβ,zero(T))
+    fill!(g.XtWX,zero(T))
     fill!(g.XtWr,zero(T))
     pmap(loc_updateXtW!, fill(g,nworkers()))
     for k in procs(g.y)
         for j in 1:p
+            for i in j:p
+                g.XtWX[i,j,1] += g.XtWX[i,j,k]
+            end
             g.δβ[j] += g.XtWr[j,k]
         end
     end
-    blas_set_num_threads(min(8,CPU_CORES))
-    BLAS.gemm!('N','T',one(T),sdata(g.Xt),sdata(g.XtW),zero(T),g.XtWX)
-    blas_set_num_threads(1)
-    A_ldiv_B!(cholfact!(g.XtWX,:L),sdata(g.δβ))
+    A_ldiv_B!(cholfact!(view(sdata(g.XtWX),:,:,1),:L),g.δβ)
 end
     
 function StatsBase.fit{T<:FloatingPoint}(g::PGLM{T};verbose::Bool=false, maxIter::Integer=30,
