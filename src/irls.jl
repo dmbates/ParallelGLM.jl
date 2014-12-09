@@ -133,8 +133,12 @@ function updateXtW!{T<:FloatingPoint}(g::SGLM{T})
                 Wj = g.Xt[j,ii]
                 g.δβ[j] += Wj * (g.y[ii] - g.μ[ii])
                 Wj *= W
-                @simd for i in j:p
-                    g.XtWX[i,j] += g.Xt[i,ii] * Wj
+                if g.blas
+                    g.XtW[j,ii] = Wj
+                else
+                    @simd for i in j:p
+                        g.XtWX[i,j] += g.Xt[i,ii] * Wj
+                    end
                 end
             end
         end
@@ -150,11 +154,11 @@ function updateXtW!{T<:FloatingPoint}(g::SGLM{T})
             end
         end
     end
-    
+    g.blas && BLAS.gemm!('N','T',one(T),g.Xt,g.XtW,zero(T),g.XtWX)
     A_ldiv_B!(cholfact!(g.XtWX,:L),g.δβ)
 end
 @doc """
-Evaluate the deviance for `PGLM` model `g` using step factor `s`
+Evaluate the deviance for an `SGLM` model `g` using step factor `s`
 
 This method also updates the `η` and `μ` members of `g`
 """->

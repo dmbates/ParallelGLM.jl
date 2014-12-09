@@ -46,10 +46,14 @@ function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
                                 d::UnivariateDistribution)
     PGLM(Xt,y,d,canonical(d))
 end
+function PGLM{T<:FloatingPoint}(Xt::Matrix{T},y::Vector{T},d::UnivariateDistribution)
+    PGLM(convert(SharedArray,Xt),convert(SharedArray,y),d)
+end
 
 type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
-    Xt::Matrix{T}                       # transposed model matrix
-    XtWX::Matrix{T}
+    Xt::Matrix{T}                    # transposed model matrix
+    XtW::Matrix{T}                   # weighted, transposed model matrix
+    XtWX::Matrix{T}                  # weighted cross-product
     wt::Vector{T}                    # prior case weights
     y::Vector{T}                     # observed response vector
     β::Vector{T}                     # base value of β
@@ -59,29 +63,38 @@ type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
     μ::Vector{T}                     # current mean vector
     d::D
     l::L
+    blas::Bool                       # use BLAS.gemm! to evaluate XtWX
     fit::Bool
 end
 function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
                                 y::Vector{T},
                                 wt::Vector{T},
                                 d::UnivariateDistribution,
-                                l::Link)
+                                l::Link,
+                                blas::Bool)
     p,n = size(Xt)
+    XtW = blas ? similar(Xt) : similar(Xt,(0,0))
     n == length(y) == length(wt) || throw(DimensionMismatch(""))
     β = Array(T,(p,))
-    g = SGLM(Xt,zeros(T,(p,p)),wt,y,β,Array(T,(p,)),Array(T,(p,)),
-             similar(y),similar(y),d,l,false)
+    g = SGLM(Xt,XtW,zeros(T,(p,p)),wt,y,β,Array(T,(p,)),Array(T,(p,)),
+             similar(y),similar(y),d,l,blas,false)
     initμη!(g)
     updateXtW!(g)
     copy!(g.β,g.δβ)
     g
 end
 function SGLM{T<:FloatingPoint}(Xt::Matrix{T},y::Vector{T},
-                                d::UnivariateDistribution,l::Link)
-    SGLM(Xt,y,fill!(similar(y),one(T)),d,l)
+                                d::UnivariateDistribution,l::Link,blas::Bool)
+    SGLM(Xt,y,fill!(similar(y),one(T)),d,l,blas)
+end
+function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
+                                y::Vector{T},
+                                d::UnivariateDistribution,
+                                blas::Bool)
+    SGLM(Xt,y,d,canonical(d),blas)
 end
 function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
                                 y::Vector{T},
                                 d::UnivariateDistribution)
-    SGLM(Xt,y,d,canonical(d))
+    SGLM(Xt,y,d,canonical(d),true)
 end
