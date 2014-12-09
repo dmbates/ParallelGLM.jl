@@ -30,6 +30,7 @@ function StatsBase.deviance{T<:FloatingPoint}(g::PGLM{T},s::T)
     pmap(loc_dev!,fill(g,nworkers()))
     sum(g.dev)
 end
+StatsBase.deviance{T<:FloatingPoint}(g::PGLM{T}) = deviance(g,zero(T))
 
 function loc_updateXtW!{T<:FloatingPoint}(g::PGLM{T})
     n,p,npr = size(g)
@@ -75,11 +76,12 @@ function updateXtW!{T<:FloatingPoint}(g::PGLM{T})
     A_ldiv_B!(cholfact!(view(sdata(g.XtWX),:,:,1),:L),g.δβ)
 end
     
-function StatsBase.fit{T<:FloatingPoint}(g::PGLM{T};verbose::Bool=false, maxIter::Integer=30,
-                                         minStepFac::Real=0.001, convTol::Real=1.e-6)
+function StatsBase.fit(g::GLM;verbose::Bool=false, maxIter::Integer=30,
+                       minStepFac::Real=0.001, convTol::Real=1.e-6)
     g.fit && return g
     maxIter > zero(maxIter) || error("maxIter must be positive")
     zero(minStepFac) < minStepFac < one(minStepFac) || error("minStepFac must be in (0,1)")
+    T = eltype(g.y)
 
     cvg = false
     devold = deviance(g,zero(T))
@@ -113,3 +115,66 @@ function loc_initμη!(g::PGLM)
     end
 end
 initμη!(g::PGLM) = pmap(loc_initμη!,fill(g,nworkers()))
+
+function initμη!(g::SGLM)
+    for i in 1:length(g.y)
+        g.μ[i] = mustart(g.d,g.y[i],g.wt[i])
+        g.η[i] = link(g.l,g.μ[i])
+    end
+end
+function updateXtW!{T<:FloatingPoint}(g::SGLM{T})
+    p,n = size(g.Xt)
+    fill!(g.XtWX,zero(T))
+    fill!(g.δβ,zero(T))
+    if g.l == canonical(g.d)
+        @inbounds for ii in 1:length(g.y)
+            W = g.wt[ii] * varfunc(g.d,g.μ[ii])
+            for j in 1:p
+                Wj = g.Xt[j,ii]
+                g.δβ[j] += Wj * (g.y[ii] - g.μ[ii])
+                Wj *= W
+                if g.blas
+                    g.XtW[j,ii] = Wj
+                else
+                    @simd for i in j:p
+                        g.XtWX[i,j] += g.Xt[i,ii] * Wj
+                    end
+                end
+            end
+        end
+    else
+        for ii in 1:length(g.y)
+            mueta = μη(g.l,g.η[ii])
+            W = g.wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
+            for j in 1:p
+                @simd for i in j:p
+                    g.XtWX[i,j] += g.Xt[i,ii] * W * g.Xt[j,ii]
+                end
+                g.δβ[j] += g.Xt[j,ii]*W*(g.y[ii] - g.μ[ii])/max(eps(T),mueta)
+            end
+        end
+    end
+    g.blas && BLAS.gemm!('N','T',one(T),g.Xt,g.XtW,zero(T),g.XtWX)
+    A_ldiv_B!(cholfact!(g.XtWX,:L),g.δβ)
+end
+@doc """
+Evaluate the deviance for an `SGLM` model `g` using step factor `s`
+
+This method also updates the `η` and `μ` members of `g`
+"""->
+function StatsBase.deviance{T<:FloatingPoint}(g::SGLM{T},s::T)
+    @simd for k in 1:length(g.β)
+        @inbounds g.βs[k] = g.β[k] + s * g.δβ[k]
+    end
+    dev = zero(T)
+    @inbounds for j in 1:length(g.y)
+        sm = zero(T)
+        @simd for k in 1:length(g.βs)
+            sm += g.Xt[k,j]*g.βs[k]
+        end
+        g.η[j] = sm
+        g.μ[j] = invlink(g.l,sm)
+        dev += g.wt[j] * devresid2(g.d,g.y[j],g.μ[j])
+    end
+    dev
+end

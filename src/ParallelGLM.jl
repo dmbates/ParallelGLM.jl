@@ -1,14 +1,17 @@
 module ParallelGLM
     using Distributions, Docile, StatsBase
-    export IdentityLink,                # types
+    export GLM,                         # types
+           IdentityLink,
            InverseLink,
            Link,
            LogLink,
            LogitLink,
            PGLM,
+           SGLM,
            
            canonical,                   # functions
            devresid2,
+           initμη!,
            invlink,
            link,
            updateXtW!,
