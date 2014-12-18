@@ -2,10 +2,10 @@
 
 abstract Link
 
-type IdentityLink <: Link end
-type InverseLink <: Link end
-type LogLink <: Link end
-type LogitLink <: Link end
+immutable IdentityLink <: Link end
+immutable InverseLink <: Link end
+immutable LogLink <: Link end
+immutable LogitLink <: Link end
 
 link(::IdentityLink,μ) = μ
 invlink(::IdentityLink,η) = η
