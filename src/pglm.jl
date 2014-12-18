@@ -55,6 +55,7 @@ type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
     XtW::Matrix{T}                   # weighted, transposed model matrix
     XtWX::Matrix{T}                  # weighted cross-product
     wt::Vector{T}                    # prior case weights
+    wtres::Vector{T}                 # weighted residuals
     y::Vector{T}                     # observed response vector
     β::Vector{T}                     # base value of β
     βs::Vector{T}                    # value of β + s*δβ
@@ -63,7 +64,7 @@ type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
     μ::Vector{T}                     # current mean vector
     d::D
     l::L
-    blas::Bool                       # use BLAS.gemm! to evaluate XtWX
+    blas::Bool                       # use BLAS.syrk! to evaluate XtWX
     fit::Bool
 end
 function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
@@ -76,7 +77,7 @@ function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
     XtW = blas ? similar(Xt) : similar(Xt,(0,0))
     n == length(y) == length(wt) || throw(DimensionMismatch(""))
     β = Array(T,(p,))
-    g = SGLM(Xt,XtW,zeros(T,(p,p)),wt,y,β,Array(T,(p,)),Array(T,(p,)),
+    g = SGLM(Xt,XtW,zeros(T,(p,p)),wt,similar(y),y,β,Array(T,(p,)),Array(T,(p,)),
              similar(y),similar(y),d,l,blas,false)
     initμη!(g)
     updateXtW!(g)

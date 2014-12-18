@@ -128,33 +128,25 @@ function updateXtW!{T<:FloatingPoint}(g::SGLM{T})
     fill!(g.δβ,zero(T))
     if g.l == canonical(g.d)
         @inbounds for ii in 1:length(g.y)
-            W = g.wt[ii] * varfunc(g.d,g.μ[ii])
+            W = sqrt(g.wt[ii] * varfunc(g.d,g.μ[ii]))
+            g.wtres[ii] = g.y[ii] - g.μ[ii]
             for j in 1:p
-                Wj = g.Xt[j,ii]
-                g.δβ[j] += Wj * (g.y[ii] - g.μ[ii])
-                Wj *= W
-                if g.blas
-                    g.XtW[j,ii] = Wj
-                else
-                    @simd for i in j:p
-                        g.XtWX[i,j] += g.Xt[i,ii] * Wj
-                    end
-                end
+                g.XtW[j,ii] = W * g.Xt[j,ii]
             end
         end
-    else
-        for ii in 1:length(g.y)
-            mueta = μη(g.l,g.η[ii])
-            W = g.wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
-            for j in 1:p
-                @simd for i in j:p
-                    g.XtWX[i,j] += g.Xt[i,ii] * W * g.Xt[j,ii]
-                end
-                g.δβ[j] += g.Xt[j,ii]*W*(g.y[ii] - g.μ[ii])/max(eps(T),mueta)
+        return A_ldiv_B!(cholfact(BLAS.syrk!('L','N',one(T),g.XtW,zero(T),g.XtWX),:L),
+                         BLAS.gemv!('N',one(T),g.Xt,g.wtres,zero(T),g.δβ))
+    end
+    for ii in 1:length(g.y)
+        mueta = μη(g.l,g.η[ii])
+        W = g.wt[ii] * abs2(mueta)/max(eps(T),varfunc(g.d,g.μ[ii]))
+        for j in 1:p
+            @simd for i in j:p
+                g.XtWX[i,j] += g.Xt[i,ii] * W * g.Xt[j,ii]
             end
+            g.δβ[j] += g.Xt[j,ii]*W*(g.y[ii] - g.μ[ii])/max(eps(T),mueta)
         end
     end
-    g.blas && BLAS.gemm!('N','T',one(T),g.Xt,g.XtW,zero(T),g.XtWX)
     A_ldiv_B!(cholfact!(g.XtWX,:L),g.δβ)
 end
 @doc """
