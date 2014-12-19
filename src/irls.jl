@@ -130,7 +130,7 @@ function updateXtW!{T<:FloatingPoint}(g::SGLM{T})
         @inbounds for ii in 1:length(g.y)
             W = sqrt(g.wt[ii] * varfunc(g.d,g.μ[ii]))
             g.wtres[ii] = g.y[ii] - g.μ[ii]
-            for j in 1:p
+            @simd for j in 1:p
                 g.XtW[j,ii] = W * g.Xt[j,ii]
             end
         end
@@ -155,17 +155,11 @@ Evaluate the deviance for an `SGLM` model `g` using step factor `s`
 This method also updates the `η` and `μ` members of `g`
 """->
 function StatsBase.deviance{T<:FloatingPoint}(g::SGLM{T},s::T)
-    @simd for k in 1:length(g.β)
-        @inbounds g.βs[k] = g.β[k] + s * g.δβ[k]
-    end
+    ## g.βs := g.β + s * g.δβ; g.η := g.Xt'*g.βs
+    BLAS.gemv!('T',one(T),g.Xt,BLAS.axpy!(s,g.δβ,copy!(g.βs,g.β)),zero(T),g.η)
     dev = zero(T)
     @inbounds for j in 1:length(g.y)
-        sm = zero(T)
-        @simd for k in 1:length(g.βs)
-            sm += g.Xt[k,j]*g.βs[k]
-        end
-        g.η[j] = sm
-        g.μ[j] = invlink(g.l,sm)
+        g.μ[j] = invlink(g.l,g.η[j])
         dev += g.wt[j] * devresid2(g.d,g.y[j],g.μ[j])
     end
     dev
