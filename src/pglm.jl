@@ -7,9 +7,9 @@ type PGLM{T<:AbstractFloat,D<:UnivariateDistribution,L<:Link} <: GLM
     XtWr::SharedMatrix{T}
     wt::SharedVector{T}                 # prior case weights
     y::SharedVector{T}                  # observed response vector
-    β::SharedVector{T}                  # base value of β
-    βs::SharedVector{T}                 # value of β + s*δβ
-    δβ::SharedVector{T}                 # increment
+    β::Vector{T}                        # base value of β
+    βs::Vector{T}                       # value of β + s*δβ
+    δβ::Vector{T}                       # increment
     η::SharedVector{T}                  # current linear predictor vector
     μ::SharedVector{T}                  # current mean vector
     dev::SharedVector{T}
@@ -17,6 +17,8 @@ type PGLM{T<:AbstractFloat,D<:UnivariateDistribution,L<:Link} <: GLM
     l::L
     fit::Bool
 end
+
+scvt(a::Array) = convert(SharedArray,a)
 
 function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
                                 y::SharedVector{T},
@@ -27,10 +29,10 @@ function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
     n == length(y) == length(wt) || throw(DimensionMismatch(""))
     pr = procs(y)
     Set(pr) == Set(procs(Xt)) == Set(procs(wt)) || error("SharedArrays must have same procs")
-    β = Base.shmem_fill(zero(T),(p,);pids = pr)
+    β = zeros(p)
     ntot = maximum(pr)
-    g = PGLM(Xt,similar(y,(p,p,ntot)),similar(y,(p,ntot)),wt,y,
-             β,copy(β),copy(β),similar(y),similar(y),similar(y,(ntot,)),
+    g = PGLM(Xt,scvt(similar(y,(p,p,ntot))),scvt(similar(y,(p,ntot))),wt,y,
+             β,copy(β),copy(β),scvt(similar(y)),scvt(similar(y)),scvt(similar(y,(ntot,))),
              d,l,false)
     initμη!(g)
     updateXtW!(g)
@@ -39,7 +41,7 @@ function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
 end
 function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},y::SharedVector{T},
                                 d::UnivariateDistribution,l::Link)
-    PGLM(Xt,y,fill!(similar(y),one(T)),d,l)
+    PGLM(Xt,y,scvt(ones(y)),d,l)
 end
 function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
                                 y::SharedVector{T},
@@ -47,7 +49,7 @@ function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
     PGLM(Xt,y,d,canonical(d))
 end
 function PGLM{T<:AbstractFloat}(Xt::Matrix{T},y::Vector{T},d::UnivariateDistribution)
-    PGLM(convert(SharedArray,Xt),convert(SharedArray,y),d)
+    PGLM(scvt(Xt),scvt(y),d)
 end
 
 type SGLM{T<:AbstractFloat,D<:UnivariateDistribution,L<:Link} <: GLM
