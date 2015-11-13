@@ -1,7 +1,7 @@
 abstract GLM
 
 @doc "Representation of a generalized linear model using SharedArrays" ->
-type PGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
+type PGLM{T<:AbstractFloat,D<:UnivariateDistribution,L<:Link} <: GLM
     Xt::SharedMatrix{T}                 # transposed model matrix
     XtWX::SharedArray{T,3}
     XtWr::SharedMatrix{T}
@@ -18,7 +18,7 @@ type PGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
     fit::Bool
 end
 
-function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
+function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
                                 y::SharedVector{T},
                                 wt::SharedVector{T},
                                 d::UnivariateDistribution,
@@ -37,20 +37,20 @@ function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
     copy!(g.β,g.δβ)
     g
 end
-function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},y::SharedVector{T},
+function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},y::SharedVector{T},
                                 d::UnivariateDistribution,l::Link)
     PGLM(Xt,y,fill!(similar(y),one(T)),d,l)
 end
-function PGLM{T<:FloatingPoint}(Xt::SharedMatrix{T},
+function PGLM{T<:AbstractFloat}(Xt::SharedMatrix{T},
                                 y::SharedVector{T},
                                 d::UnivariateDistribution)
     PGLM(Xt,y,d,canonical(d))
 end
-function PGLM{T<:FloatingPoint}(Xt::Matrix{T},y::Vector{T},d::UnivariateDistribution)
+function PGLM{T<:AbstractFloat}(Xt::Matrix{T},y::Vector{T},d::UnivariateDistribution)
     PGLM(convert(SharedArray,Xt),convert(SharedArray,y),d)
 end
 
-type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
+type SGLM{T<:AbstractFloat,D<:UnivariateDistribution,L<:Link} <: GLM
     Xt::Matrix{T}                    # transposed model matrix
     XtW::Matrix{T}                   # weighted, transposed model matrix
     XtWX::Matrix{T}                  # weighted cross-product
@@ -67,7 +67,7 @@ type SGLM{T<:FloatingPoint,D<:UnivariateDistribution,L<:Link} <: GLM
     blas::Bool                       # use BLAS.syrk! to evaluate XtWX
     fit::Bool
 end
-function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
+function SGLM{T<:AbstractFloat}(Xt::Matrix{T},
                                 y::Vector{T},
                                 wt::Vector{T},
                                 d::UnivariateDistribution,
@@ -84,17 +84,17 @@ function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
     copy!(g.β,g.δβ)
     g
 end
-function SGLM{T<:FloatingPoint}(Xt::Matrix{T},y::Vector{T},
+function SGLM{T<:AbstractFloat}(Xt::Matrix{T},y::Vector{T},
                                 d::UnivariateDistribution,l::Link,blas::Bool)
     SGLM(Xt,y,fill!(similar(y),one(T)),d,l,blas)
 end
-function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
+function SGLM{T<:AbstractFloat}(Xt::Matrix{T},
                                 y::Vector{T},
                                 d::UnivariateDistribution,
                                 blas::Bool)
     SGLM(Xt,y,d,canonical(d),blas)
 end
-function SGLM{T<:FloatingPoint}(Xt::Matrix{T},
+function SGLM{T<:AbstractFloat}(Xt::Matrix{T},
                                 y::Vector{T},
                                 d::UnivariateDistribution)
     SGLM(Xt,y,d,canonical(d),true)

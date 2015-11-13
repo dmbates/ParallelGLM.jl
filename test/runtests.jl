@@ -1,16 +1,16 @@
 using Base.Test, StatsBase
 
 addprocs(2)
-@everywhere using Distributions, ParallelGLM
+using Distributions, ParallelGLM
 
 n = 100_000
 srand(1234321)
 
 const Xt = convert(SharedArray,vcat(ones(n)',randn(19,n)))
-const βtrue = convert(SharedArray,randn(size(Xt,1)))
-const ηtrue = Xt'*βtrue
-const μtrue = similar(ηtrue);
-const ll = LogitLink();
+const βtrue = randn(size(Xt,1))
+const ηtrue = convert(SharedArray,Xt'*βtrue)
+const μtrue = similar(ηtrue)
+const ll = LogitLink()
 for i in 1:n
     μtrue[i] = invlink(ll,ηtrue[i])
 end
